@@ -456,7 +456,7 @@ print_pgdir(pde_t *pgdir)
 				PGADDR(i, 0, 0), PTE_ADDR(*dentry), *dentry & 0xFFF); 
 			if(!is_huge_page) {
 				// dig deeper
-				pte_t *second_layer = (pte_t *)PTE_ADDR(*dentry);
+				pte_t *second_layer = (pte_t *)KADDR(PTE_ADDR(*dentry));
 				for(int j = 0; j < NPTENTRIES; j++) {
 					pte_t *entry = second_layer + j;
 					if(*entry & PTE_P) {
