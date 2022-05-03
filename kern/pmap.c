@@ -19,6 +19,8 @@ pde_t *kern_pgdir;		// Kernel's initial page directory
 struct PageInfo *pages;		// Physical page state array
 static struct PageInfo *page_free_list;	// Free list of physical pages
 
+// enable PSE extension support
+#define LAB2_PSE_SUPPORT
 
 // --------------------------------------------------------------
 // Detect machine's physical memory setup.
@@ -63,6 +65,7 @@ i386_detect_memory(void)
 // --------------------------------------------------------------
 
 static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm);
+static void print_pgdir(pde_t *pgdir);
 static void check_page_free_list(bool only_low_memory);
 static void check_page_alloc(void);
 static void check_kern_pgdir(void);
@@ -214,6 +217,14 @@ mem_init(void)
 	// Your code goes here:
 	uintptr_t top_size = ~KERNBASE + 1; // = 2^32 - KERNBASE
 	boot_map_region(kern_pgdir, KERNBASE, top_size, 0, PTE_W);
+
+	// print the entire page table for debugging
+	// print_pgdir(kern_pgdir);
+
+	// for huge page: set the PSE ENABLE BIT before running page table checks
+	#ifdef LAB2_PSE_SUPPORT
+	lcr4(rcr4() | CR4_PSE);
+	#endif
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -426,12 +437,48 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
-	for(uintptr_t offset = 0; offset < size; offset += PGSIZE) {
+	uintptr_t offset = 0;
+	// challenge: use 4MB huge page
+	#ifdef LAB2_PSE_SUPPORT
+	for(; offset + PTSIZE <= size; offset += PTSIZE) {
+		pde_t *entry = pgdir + PDX(va + offset);
+		*entry = (pa + offset) | PTE_P | PTE_PS | perm;
+	}
+	#endif
+	for(; offset < size; offset += PGSIZE) {
 		pte_t *entry = pgdir_walk(pgdir, (void *)(va + offset), 1);
 		if(entry == NULL) {
 			panic("failed to get pde");
 		}
 		*entry = (pa + offset) | PTE_P | perm;
+	}
+}
+
+
+// debug print the entire page table
+static void
+print_pgdir(pde_t *pgdir)
+{
+	cprintf("page table @ %p\n", pgdir);
+	for(int i = 0; i < NPDENTRIES; i++) {
+		pde_t *dentry = pgdir + i;
+		if(*dentry & PTE_P) {
+			bool is_huge_page = *dentry & PTE_PS;
+			cprintf("0x%x (%s) %p->%p permissions 0x%x\n",
+				i, is_huge_page ? "huge page" : "regular",
+				PGADDR(i, 0, 0), PTE_ADDR(*dentry), *dentry & 0xFFF); 
+			if(!is_huge_page) {
+				// dig deeper
+				pte_t *second_layer = (pte_t *)PTE_ADDR(*dentry);
+				for(int j = 0; j < NPTENTRIES; j++) {
+					pte_t *entry = second_layer + j;
+					if(*entry & PTE_P) {
+						cprintf("\t0x%x %p->%p permissions 0x%x\n",
+							j, PGADDR(i, j, 0), PTE_ADDR(*entry), *entry & 0xFFF);
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -802,6 +849,15 @@ check_va2pa(pde_t *pgdir, uintptr_t va)
 	pgdir = &pgdir[PDX(va)];
 	if (!(*pgdir & PTE_P))
 		return ~0;
+	
+	// added by student: support huge page translation
+	#ifdef LAB2_PSE_SUPPORT
+	if (*pgdir & PTE_PS) {
+		// the check is still assuming 4K
+		return (physaddr_t)PTE_ADDR(*pgdir) + PGSIZE * (physaddr_t)PTX(va);
+	}
+	#endif
+
 	p = (pte_t*) KADDR(PTE_ADDR(*pgdir));
 	if (!(p[PTX(va)] & PTE_P))
 		return ~0;
