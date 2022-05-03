@@ -65,7 +65,6 @@ i386_detect_memory(void)
 // --------------------------------------------------------------
 
 static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm);
-static void print_pgdir(pde_t *pgdir);
 static void check_page_free_list(bool only_low_memory);
 static void check_page_alloc(void);
 static void check_kern_pgdir(void);
@@ -160,6 +159,8 @@ mem_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	envs = (struct Env *)boot_alloc(NENV * sizeof(struct Env));
+	memset(envs, 0, NENV * sizeof(struct Env));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -192,6 +193,7 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	boot_map_region(kern_pgdir, UENVS, PTSIZE, PADDR(envs), PTE_U);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -456,30 +458,30 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 
 
 // debug print the entire page table
-static void
-print_pgdir(pde_t *pgdir)
+void print_pgdir(pde_t *pgdir)
 {
-	cprintf("page table @ %p\n", pgdir);
+	cprintf("----page table @ %p\n", pgdir);
 	for(int i = 0; i < NPDENTRIES; i++) {
 		pde_t *dentry = pgdir + i;
 		if(*dentry & PTE_P) {
 			bool is_huge_page = *dentry & PTE_PS;
-			cprintf("0x%x (%s) %p->%p permissions 0x%x\n",
-				i, is_huge_page ? "huge page" : "regular",
+			cprintf("0x%x (%s) %p->%p flags 0x%x\n",
+				i, is_huge_page ? "huge" : "regular",
 				PGADDR(i, 0, 0), PTE_ADDR(*dentry), *dentry & 0xFFF); 
 			if(!is_huge_page) {
 				// dig deeper
-				pte_t *second_layer = (pte_t *)PTE_ADDR(*dentry);
+				pte_t *second_layer = (pte_t *)KADDR(PTE_ADDR(*dentry));
 				for(int j = 0; j < NPTENTRIES; j++) {
 					pte_t *entry = second_layer + j;
 					if(*entry & PTE_P) {
-						cprintf("\t0x%x %p->%p permissions 0x%x\n",
+						cprintf("\t0x%x %p->%p flags 0x%x\n",
 							j, PGADDR(i, j, 0), PTE_ADDR(*entry), *entry & 0xFFF);
 					}
 				}
 			}
 		}
 	}
+	cprintf("---end page table\n");
 }
 
 //
