@@ -47,9 +47,57 @@
  * Lab 3: Your code here for generating entry points for the different traps.
  */
 
+// refer to https://wiki.osdev.org/Exception for whether EC is present or not
+TRAPHANDLER_NOEC(TH_DIVIDE, 0)
+TRAPHANDLER_NOEC(TH_DEBUG, 1)
+TRAPHANDLER_NOEC(TH_NMI, 2)
+TRAPHANDLER_NOEC(TH_BRKPT, 3)
+TRAPHANDLER_NOEC(TH_OFLOW, 4)
+TRAPHANDLER_NOEC(TH_BOUND, 5)
+TRAPHANDLER_NOEC(TH_ILLOP, 6)
+TRAPHANDLER_NOEC(TH_DEVICE, 7)
+TRAPHANDLER(TH_DBLFLT, 8)
+// TRAPHANDLER_NOEC(TH_COPROC, 9)		// not defined
+TRAPHANDLER(TH_TSS, 10)
+TRAPHANDLER(TH_SEGNP, 11)
+TRAPHANDLER(TH_STACK, 12)
+TRAPHANDLER(TH_GPFLT, 13)
+TRAPHANDLER(TH_PGFLT, 14)
+// TRAPHANDLER_NOEC(TH_RES, 15)			// not defined
+TRAPHANDLER_NOEC(TH_FPERR, 16)
+TRAPHANDLER(TH_ALIGN, 17)
+TRAPHANDLER_NOEC(TH_MCHK, 18)
+TRAPHANDLER_NOEC(TH_SIMDERR, 19)
 
 
 /*
  * Lab 3: Your code here for _alltraps
  */
 
+filename:
+	.asciz	"trapentry.S"
+panic_msg:
+	.asciz	"should never be here!"
+
+// definition for generic trap handler
+.align 2
+_alltraps:
+	// construct the rest of TrapFrame
+	pushl	%ds
+	pushl	%es
+	// push all general-purpose registers
+	pushal
+	// set kernel data segment
+	movl	$GD_KD, %eax
+	mov		%eax, %ds
+	mov		%eax, %es
+	// push TrapFrame pointer
+	push	%esp
+	call	trap
+	
+	// should never return from here
+	// print message & panic
+	pushl	panic_msg
+	pushl	$0
+	pushl	filename
+	call	_panic

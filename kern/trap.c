@@ -65,6 +65,48 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	extern void TH_DIVIDE(void);
+	extern void TH_DEBUG(void);
+	extern void TH_NMI(void);
+	extern void TH_BRKPT(void);
+	extern void TH_OFLOW(void);
+	extern void TH_BOUND(void);
+	extern void TH_ILLOP(void);
+	extern void TH_DEVICE(void);
+	extern void TH_DBLFLT(void);
+	extern void TH_TSS(void);
+	extern void TH_SEGNP(void);
+	extern void TH_STACK(void);
+	extern void TH_GPFLT(void);
+	extern void TH_PGFLT(void);
+	extern void TH_FPERR(void);
+	extern void TH_ALIGN(void);
+	extern void TH_MCHK(void);
+	extern void TH_SIMDERR(void);
+
+	// refer to https://wiki.osdev.org/Exception
+	// only NMI is an interrupt
+	// currently we disable all int instructions from user mode
+	// we should set code segment to kernel text - GD_KT
+	
+	SETGATE(idt[T_DIVIDE], 1, GD_KT, TH_DIVIDE, 0);
+	SETGATE(idt[T_DEBUG], 1, GD_KT, TH_DEBUG, 0);
+	SETGATE(idt[T_NMI], 0, GD_KT, TH_NMI, 0);
+	SETGATE(idt[T_BRKPT], 1, GD_KT, TH_BRKPT, 0);
+	SETGATE(idt[T_OFLOW], 1, GD_KT, TH_OFLOW, 0);
+	SETGATE(idt[T_BOUND], 1, GD_KT, TH_BOUND, 0);
+	SETGATE(idt[T_ILLOP], 1, GD_KT, TH_ILLOP, 0);
+	SETGATE(idt[T_DEVICE], 1, GD_KT, TH_DEVICE, 0);
+	SETGATE(idt[T_DBLFLT], 1, GD_KT, TH_DBLFLT, 0);
+	SETGATE(idt[T_TSS], 1, GD_KT, TH_TSS, 0);
+	SETGATE(idt[T_SEGNP], 1, GD_KT, TH_SEGNP, 0);
+	SETGATE(idt[T_STACK], 1, GD_KT, TH_STACK, 0);
+	SETGATE(idt[T_GPFLT], 1, GD_KT, TH_GPFLT, 0);
+	SETGATE(idt[T_PGFLT], 1, GD_KT, TH_PGFLT, 0);
+	SETGATE(idt[T_FPERR], 1, GD_KT, TH_FPERR, 0);
+	SETGATE(idt[T_ALIGN], 1, GD_KT, TH_ALIGN, 0);
+	SETGATE(idt[T_MCHK], 1, GD_KT, TH_MCHK, 0);
+	SETGATE(idt[T_SIMDERR], 1, GD_KT, TH_SIMDERR, 0);
 
 	// Per-CPU setup 
 	trap_init_percpu();
