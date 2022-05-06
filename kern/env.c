@@ -187,11 +187,15 @@ env_setup_vm(struct Env *e)
 	// LAB 3: Your code here.
 	p->pp_ref++;
 	e->env_pgdir = (pde_t *)page2kva(p);
+
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+	/*
 	// copy the part above UTOP from kernel PT
 	memcpy(e->env_pgdir + PDX(UTOP), kern_pgdir + PDX(UTOP),
 		(NPDENTRIES - PDX(UTOP)) * sizeof(pde_t));
 	// and clear everything below UTOP
 	memset(e->env_pgdir, 0, PDX(UTOP) * sizeof(pde_t));
+	*/
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -524,8 +528,8 @@ env_run(struct Env *e)
 		curenv->env_status = ENV_RUNNING;
 		curenv->env_runs++;
 		lcr3(PADDR(curenv->env_pgdir));
+		cprintf("Switching to env %p(%p) %d %d\n", curenv, PADDR(curenv), curenv->env_id, ENVX(curenv->env_id));
 	}
-
 	env_pop_tf(&curenv->env_tf);
 }
 

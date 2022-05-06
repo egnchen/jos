@@ -442,9 +442,15 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	uintptr_t offset = 0;
 	// challenge: use 4MB huge page
 	#ifdef LAB2_PSE_SUPPORT
-	for(; offset + PTSIZE <= size; offset += PTSIZE) {
-		pde_t *entry = pgdir + PDX(va + offset);
-		*entry = (pa + offset) | PTE_P | PTE_PS | perm;
+	// 4MB huge page should be 4M aligned, check this first
+	// maybe we could map 4M pages in between and use 4K pages on both sides
+	// to fill the missing bits, but right now we just consider 4M, and then 4K
+	// which is sufficient for mapping the entire physical memory
+	if((va & (PTSIZE - 1)) || (pa & (PTSIZE - 1)) == 0) {
+		for(; offset + PTSIZE <= size; offset += PTSIZE) {
+			pde_t *entry = pgdir + PDX(va + offset);
+			*entry = (pa + offset) | PTE_P | PTE_PS | perm;
+		}
 	}
 	#endif
 	for(; offset < size; offset += PGSIZE) {
@@ -471,11 +477,18 @@ void print_pgdir(pde_t *pgdir)
 			if(!is_huge_page) {
 				// dig deeper
 				pte_t *second_layer = (pte_t *)KADDR(PTE_ADDR(*dentry));
+				int cnt = 0;
 				for(int j = 0; j < NPTENTRIES; j++) {
 					pte_t *entry = second_layer + j;
 					if(*entry & PTE_P) {
 						cprintf("\t0x%x %p->%p flags 0x%x\n",
 							j, PGADDR(i, j, 0), PTE_ADDR(*entry), *entry & 0xFFF);
+						cnt++;
+					}
+					// should be NPTENTRIES, but that's too much
+					if(cnt == 20) {
+						cprintf("\t...and possibly more\n");
+						break;
 					}
 				}
 			}
@@ -617,7 +630,16 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
-
+	perm |= PTE_P;
+	uintptr_t va_start = ROUNDDOWN((uint32_t)va, PGSIZE);
+	uintptr_t va_end = ROUNDUP((uint32_t)va + len, PGSIZE);
+	for(uintptr_t cur_va = va_start; cur_va < va_end; cur_va += PGSIZE) {
+		pte_t *entry = pgdir_walk(env->env_pgdir, (void *)cur_va, 0);
+		if(entry == NULL || (*entry & perm) != perm) {
+			user_mem_check_addr = MAX((uintptr_t)va, cur_va);
+			return -E_FAULT;
+		}
+	}
 	return 0;
 }
 
