@@ -72,6 +72,51 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	extern void trap_handle_divide(void);
+	extern void trap_handle_debug(void);
+	extern void trap_handle_nmi(void);
+	extern void trap_handle_brkpt(void);
+	extern void trap_handle_oflow(void);
+	extern void trap_handle_bound(void);
+	extern void trap_handle_illop(void);
+	extern void trap_handle_device(void);
+	extern void trap_handle_dblflt(void);
+	extern void trap_handle_tss(void);
+	extern void trap_handle_segnp(void);
+	extern void trap_handle_stack(void);
+	extern void trap_handle_gpflt(void);
+	extern void trap_handle_pgflt(void);
+	extern void trap_handle_fperr(void);
+	extern void trap_handle_align(void);
+	extern void trap_handle_mchk(void);
+	extern void trap_handle_simderr(void);
+	extern void trap_handle_syscall(void);
+
+	// refer to https://wiki.osdev.org/Exception
+	// only NMI is an interrupt
+	// currently we disable all int instructions from user mode
+	// we should set code segment to kernel text - GD_KT
+
+	SETGATE(idt[T_DIVIDE], 1, GD_KT, trap_handle_divide, 0);
+	SETGATE(idt[T_DEBUG], 1, GD_KT, trap_handle_debug, 0);
+	SETGATE(idt[T_NMI], 0, GD_KT, trap_handle_nmi, 0);
+	SETGATE(idt[T_BRKPT], 1, GD_KT, trap_handle_brkpt, 3);
+	SETGATE(idt[T_OFLOW], 1, GD_KT, trap_handle_oflow, 0);
+	SETGATE(idt[T_BOUND], 1, GD_KT, trap_handle_bound, 0);
+	SETGATE(idt[T_ILLOP], 1, GD_KT, trap_handle_illop, 0);
+	SETGATE(idt[T_DEVICE], 1, GD_KT, trap_handle_device, 0);
+	SETGATE(idt[T_DBLFLT], 1, GD_KT, trap_handle_dblflt, 0);
+	SETGATE(idt[T_TSS], 1, GD_KT, trap_handle_tss, 0);
+	SETGATE(idt[T_SEGNP], 1, GD_KT, trap_handle_segnp, 0);
+	SETGATE(idt[T_STACK], 1, GD_KT, trap_handle_stack, 0);
+	SETGATE(idt[T_GPFLT], 1, GD_KT, trap_handle_gpflt, 0);
+	SETGATE(idt[T_PGFLT], 1, GD_KT, trap_handle_pgflt, 0);
+	SETGATE(idt[T_FPERR], 1, GD_KT, trap_handle_fperr, 0);
+	SETGATE(idt[T_ALIGN], 1, GD_KT, trap_handle_align, 0);
+	SETGATE(idt[T_MCHK], 1, GD_KT, trap_handle_mchk, 0);
+	SETGATE(idt[T_SIMDERR], 1, GD_KT, trap_handle_simderr, 0);
+
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, trap_handle_syscall, 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -174,9 +219,6 @@ print_regs(struct PushRegs *regs)
 static void
 trap_dispatch(struct Trapframe *tf)
 {
-	// Handle processor exceptions.
-	// LAB 3: Your code here.
-
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
 	// IRQ line or other reasons. We don't care.
@@ -185,11 +227,32 @@ trap_dispatch(struct Trapframe *tf)
 		print_trapframe(tf);
 		return;
 	}
+	
+	// Handle processor exceptions.
+	// LAB 3: Your code here.
+	switch(tf->tf_trapno) {
+	case T_PGFLT:
+		page_fault_handler(tf);
+		break;
+	case T_BRKPT:
+		monitor(tf);
+		break;
+	case T_SYSCALL:
+		tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax,
+			tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx,  tf->tf_regs.reg_ebx, 
+			tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		break;
+	default:
+		goto bad;
+	}
+	return;
+
 
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
 
+bad:
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -271,6 +334,9 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
+	if(tf->tf_cs == GD_KT) {
+		panic("page fault in kernel mode");
+	}
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
