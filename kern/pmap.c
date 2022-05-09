@@ -222,9 +222,6 @@ mem_init(void)
 	uintptr_t top_size = ~KERNBASE + 1; // = 2^32 - KERNBASE
 	boot_map_region(kern_pgdir, KERNBASE, top_size, 0, PTE_W);
 
-	// print the entire page table for debugging
-	// print_pgdir(kern_pgdir);
-
 	// for huge page: set the PSE ENABLE BIT before running page table checks
 	#ifdef LAB2_PSE_SUPPORT
 	lcr4(rcr4() | CR4_PSE);
@@ -232,6 +229,9 @@ mem_init(void)
 
 	// Initialize the SMP-related parts of the memory map
 	mem_init_mp();
+
+	// print the entire page table for debugging
+	// print_pgdir(kern_pgdir);
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -280,7 +280,13 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	
+	// overwrite bootstack mapping here
+	for(size_t i = 0; i < NCPU; i++) {
+		uintptr_t cur_top = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		boot_map_region(kern_pgdir, cur_top - KSTKSIZE, KSTKSIZE,
+			PADDR(percpu_kstacks[i]), PTE_W);
+	}
 }
 
 // --------------------------------------------------------------
@@ -327,6 +333,10 @@ page_init(void)
 	// the rest of base memory
 	size_t i;
 	for(i = 1; i < npages_basemem; i++) {
+		// avoid adding the AP bootstrap code page to free list
+		if(i * PGSIZE == MPENTRY_PADDR) {
+			continue;
+		}
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
@@ -520,10 +530,10 @@ void print_pgdir(pde_t *pgdir)
 						cnt++;
 					}
 					// should be NPTENTRIES, but that's too much
-					if(cnt == 20) {
-						cprintf("\t...and possibly more\n");
-						break;
-					}
+					// if(cnt == 20) {
+					// 	cprintf("\t...and possibly more\n");
+					// 	break;
+					// }
 				}
 			}
 		}
@@ -672,7 +682,13 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	void *ret = (void *)base;
+	if(base + size > MMIOLIM) {
+		panic("mmio mapping exceed MMIOLIM");
+	}
+	boot_map_region(kern_pgdir,	 base, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+	base = ROUNDUP(base + size, PGSIZE);
+	return ret;
 }
 
 static uintptr_t user_mem_check_addr;

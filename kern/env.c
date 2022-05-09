@@ -556,6 +556,7 @@ env_run(struct Env *e)
 		lcr3(PADDR(curenv->env_pgdir));
 		cprintf("Switching to env %p(%p) %d %d\n", curenv, PADDR(curenv), curenv->env_id, ENVX(curenv->env_id));
 	}
+	unlock_kernel();
 	env_pop_tf(&curenv->env_tf);
 }
 
